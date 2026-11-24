@@ -250,7 +250,7 @@ export default function AdminDashboard({
             {reviews.map((review) => (
               <article className="admin-panel admin-review-card" key={review.id}>
                 <div>
-                  <p className="admin-eyebrow">{review.products?.name ?? "Part"} · {review.status}</p>
+                  <p className="admin-eyebrow">{(Array.isArray(review.products) ? review.products[0]?.name : review.products?.name) ?? "Part"} · {review.status}</p>
                   <h2>{review.customer_name} · {review.rating} / 5</h2>
                   <p>{review.comment}</p>
                   <time dateTime={review.created_at}>{formatDate(review.created_at)}</time>

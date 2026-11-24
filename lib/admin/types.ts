@@ -44,7 +44,7 @@ export type AdminReview = {
   comment: string;
   status: "pending" | "approved" | "rejected";
   created_at: string;
-  products: { name: string } | null;
+  products: { name: string } | { name: string }[] | null;
 };
 
 export type AdminActionResult = {
