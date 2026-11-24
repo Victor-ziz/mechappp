@@ -1,0 +1,69 @@
+.admin-access {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: #f6f7f5;
+}
+
+.admin-access-card {
+  width: min(440px, 100%);
+  padding: 28px 22px;
+  border: 1px solid #e4e8e2;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.admin-access-card h1 {
+  margin: 0 0 8px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(28px, 7vw, 36px);
+  font-weight: 500;
+}
+
+.admin-access-card > p {
+  margin: 0 0 18px;
+  color: #687164;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.admin-access-card form {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-access-card label {
+  display: grid;
+  gap: 6px;
+  color: #566052;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-access-card input {
+  width: 100%;
+  height: 48px;
+  padding: 0 12px;
+  border: 1px solid #dfe4dc;
+  border-radius: 6px;
+  background: #fff;
+  color: #242a23;
+  font-size: 16px;
+}
+
+.admin-access-card .admin-primary-button {
+  width: 100%;
+}
+
+.admin-access-card .admin-alert {
+  margin: 0;
+}
+
+.admin-access-back {
+  display: inline-flex;
+  margin-top: 16px;
+  color: #697267;
+  font-size: 13px;
+  font-weight: 700;
+}

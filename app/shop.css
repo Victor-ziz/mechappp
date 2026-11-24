@@ -1,0 +1,11 @@
+.photo-count {
+  position: absolute;
+  z-index: 2;
+  left: 8px;
+  top: 8px;
+  padding: 6px 8px;
+  background: rgba(36, 39, 32, .72);
+  color: #fff;
+  font-size: 10px;
+  letter-spacing: .3px;
+}
