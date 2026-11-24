@@ -36,6 +36,17 @@ export type AdminCustomer = {
   created_at: string;
 };
 
+export type AdminReview = {
+  id: string;
+  product_id: number;
+  customer_name: string;
+  rating: number;
+  comment: string;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+  products: { name: string } | null;
+};
+
 export type AdminActionResult = {
   success: boolean;
   error?: string;

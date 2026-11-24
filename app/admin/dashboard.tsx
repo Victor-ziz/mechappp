@@ -4,19 +4,20 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Boxes, Car, CircleDollarSign, ClipboardList, LayoutDashboard, LogOut, PackagePlus, ShieldCheck, Users } from "lucide-react";
+import { ArrowLeft, Boxes, Car, CircleDollarSign, ClipboardList, LayoutDashboard, LogOut, PackagePlus, ShieldCheck, Star, Users } from "lucide-react";
 import { supabase } from "../../lib/supabase/client";
-import type { AdminCustomer, AdminOrder, AdminOrderItem, AdminProduct } from "../../lib/admin/types";
-import { renameCar, setProductActive, updateOrderStatus } from "./actions";
+import type { AdminCustomer, AdminOrder, AdminOrderItem, AdminProduct, AdminReview } from "../../lib/admin/types";
+import { moderateReview, renameCar, setProductActive, updateOrderStatus } from "./actions";
 import ProductForm from "./product-form";
 
-type Section = "overview" | "cars" | "products" | "orders" | "customers";
+type Section = "overview" | "cars" | "products" | "orders" | "reviews" | "customers";
 
 const sections: { id: Section; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "cars", label: "Cars", icon: Car },
   { id: "products", label: "Parts & stock", icon: Boxes },
   { id: "orders", label: "Orders", icon: ClipboardList },
+  { id: "reviews", label: "Reviews", icon: Star },
   { id: "customers", label: "Customers", icon: Users },
 ];
 
@@ -40,11 +41,15 @@ export default function AdminDashboard({
   products,
   orders,
   customers,
+  reviews,
+  reviewsError,
   adminEmail,
 }: {
   products: AdminProduct[];
   orders: AdminOrder[];
   customers: AdminCustomer[];
+  reviews: AdminReview[];
+  reviewsError: string;
   adminEmail: string;
 }) {
   const router = useRouter();
@@ -80,6 +85,10 @@ export default function AdminDashboard({
 
   const changeOrderStatus = (id: string, status: AdminOrder["status"]) => {
     startTransition(async () => finishAction(await updateOrderStatus(id, status), "Order status updated."));
+  };
+
+  const decideReview = (id: string, status: "approved" | "rejected") => {
+    startTransition(async () => finishAction(await moderateReview(id, status), status === "approved" ? "Review published." : "Review kept off the shop."));
   };
 
   const signOut = () => {
@@ -232,6 +241,29 @@ export default function AdminDashboard({
               </article>
             ))}
             {orders.length === 0 && <section className="admin-panel admin-empty"><ClipboardList size={28} /><h2>No orders to show</h2><p>Orders placed through checkout will appear here.</p></section>}
+          </div>
+        )}
+
+        {section === "reviews" && (
+          <div className="admin-content">
+            {reviewsError && <p className="admin-alert" role="alert">{reviewsError}</p>}
+            {reviews.map((review) => (
+              <article className="admin-panel admin-review-card" key={review.id}>
+                <div>
+                  <p className="admin-eyebrow">{review.products?.name ?? "Part"} · {review.status}</p>
+                  <h2>{review.customer_name} · {review.rating} / 5</h2>
+                  <p>{review.comment}</p>
+                  <time dateTime={review.created_at}>{formatDate(review.created_at)}</time>
+                </div>
+                {review.status === "pending" && (
+                  <div className="admin-review-actions">
+                    <button type="button" onClick={() => decideReview(review.id, "approved")} disabled={busy}>Approve</button>
+                    <button type="button" onClick={() => decideReview(review.id, "rejected")} disabled={busy}>Reject</button>
+                  </div>
+                )}
+              </article>
+            ))}
+            {reviews.length === 0 && !reviewsError && <section className="admin-panel admin-empty"><Star size={28} /><h2>No reviews yet</h2><p>Reviews appear here after a customer who bought the part sends one.</p></section>}
           </div>
         )}
 

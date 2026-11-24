@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import AdminAccess from "./access";
 import AdminDashboard from "./dashboard";
 import { storeHasAdmin } from "../../lib/supabase/admin";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
-import type { AdminCustomer, AdminOrder, AdminProduct } from "../../lib/admin/types";
+import type { AdminCustomer, AdminOrder, AdminProduct, AdminReview } from "../../lib/admin/types";
 
 export const metadata: Metadata = {
   title: "FRAN6 admin",
@@ -19,6 +20,7 @@ export default function AdminPage() {
 }
 
 async function AdminPageContent() {
+  await connection();
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
     return (
       <main className="admin-setup">
@@ -63,10 +65,11 @@ async function AdminPageContent() {
   }
   if (user.app_metadata.role !== "admin") return <AdminAccess mode="forbidden" />;
 
-  const [productsResult, ordersResult, customersResult] = await Promise.all([
+  const [productsResult, ordersResult, customersResult, reviewsResult] = await Promise.all([
     supabase.from("products").select("id,name,category,price,image,images,stock,active,created_at").order("id"),
     supabase.from("orders").select("id,reference,customer_name,customer_email,channel,status,total,items,created_at").order("created_at", { ascending: false }).limit(100),
     supabase.from("customer_profiles").select("id,email,full_name,created_at").order("created_at", { ascending: false }).limit(200),
+    supabase.from("reviews").select("id,product_id,customer_name,rating,comment,status,created_at,products(name)").order("created_at", { ascending: false }).limit(100),
   ]);
   const dataError = productsResult.error || ordersResult.error || customersResult.error;
   if (dataError) {
@@ -84,6 +87,8 @@ async function AdminPageContent() {
       products={(productsResult.data ?? []) as AdminProduct[]}
       orders={(ordersResult.data ?? []) as AdminOrder[]}
       customers={(customersResult.data ?? []) as AdminCustomer[]}
+      reviews={(reviewsResult.data ?? []) as AdminReview[]}
+      reviewsError={reviewsResult.error ? "Reviews are not ready yet. Run supabase/migrations/202611240001_reviews.sql in the Supabase SQL editor." : ""}
       adminEmail={user.email ?? ""}
     />
   );

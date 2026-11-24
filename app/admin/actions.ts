@@ -132,3 +132,15 @@ export async function updateOrderStatus(id: string, status: AdminOrder["status"]
   revalidatePath("/admin");
   return { success: true };
 }
+
+export async function moderateReview(id: string, status: "approved" | "rejected"): Promise<AdminActionResult> {
+  const supabase = await requireAdmin();
+  if (!/^[0-9a-f-]{36}$/i.test(id) || (status !== "approved" && status !== "rejected")) {
+    return { success: false, error: "Invalid review." };
+  }
+  const { error } = await supabase.from("reviews").update({ status }).eq("id", id);
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/admin");
+  revalidatePath("/");
+  return { success: true };
+}

@@ -3,9 +3,11 @@
 import Image from "next/image";
 import "./shop.css";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { ChevronLeft, ChevronRight, Heart, LogOut, MessageCircle, Minus, Plus, Search, ShieldCheck, ShoppingBag, Trash2, UserRound, X } from "lucide-react";
+import { ChevronRight, Heart, LogOut, MessageCircle, Minus, Plus, Search, ShieldCheck, ShoppingBag, Trash2, UserRound, X } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "../lib/supabase/client";
+import PhotoSwipe from "./photo-swipe";
+import ProductReviews, { StarRow } from "./product-reviews";
 
 declare global {
   interface Window {
@@ -56,12 +58,12 @@ export default function Home() {
   const [activeCategory, setActiveCategory] = useState(allCars);
   const [storeProducts, setStoreProducts] = useState(products);
   const [catalogError, setCatalogError] = useState("");
+  const [ratings, setRatings] = useState<Record<number, { average: number; count: number }>>({});
   const [cart, setCart] = useState<Record<number, number>>({});
   const [cartOpen, setCartOpen] = useState(false);
   const [saved, setSaved] = useState<number[]>([]);
   const [savedOpen, setSavedOpen] = useState(false);
   const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
-  const [previewImageIndex, setPreviewImageIndex] = useState(0);
   const [previewQuantity, setPreviewQuantity] = useState(1);
   const previewCloseButton = useRef<HTMLButtonElement>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -120,6 +122,24 @@ export default function Home() {
       }
     })();
     return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    void supabase.from("reviews").select("product_id,rating").eq("status", "approved").then(({ data }) => {
+      if (!data) return;
+      const grouped = new Map<number, number[]>();
+      for (const row of data) {
+        const scores = grouped.get(row.product_id) ?? [];
+        scores.push(row.rating);
+        grouped.set(row.product_id, scores);
+      }
+      const next: Record<number, { average: number; count: number }> = {};
+      for (const [id, scores] of grouped) {
+        next[id] = { average: scores.reduce((sum, score) => sum + score, 0) / scores.length, count: scores.length };
+      }
+      setRatings(next);
+    });
   }, []);
 
   useEffect(() => {
@@ -184,12 +204,6 @@ export default function Home() {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setPreviewProduct(null);
-      if (event.key === "ArrowLeft") {
-        setPreviewImageIndex((index) => (index - 1 + previewProduct.images.length) % previewProduct.images.length);
-      }
-      if (event.key === "ArrowRight") {
-        setPreviewImageIndex((index) => (index + 1) % previewProduct.images.length);
-      }
     };
     window.addEventListener("keydown", handleKeyDown);
 
@@ -244,7 +258,6 @@ export default function Home() {
   };
 
   const openPreview = (product: Product) => {
-    setPreviewImageIndex(0);
     setPreviewQuantity(1);
     setPreviewProduct(product);
   };
@@ -564,8 +577,9 @@ export default function Home() {
                     <h3><button type="button" className="product-title-button" onClick={() => openPreview(product)}>{product.name}</button></h3>
                     <div className="product-bottom">
                       <strong>{formatNaira(product.price)}</strong>
+                      {ratings[product.id] && <p className="product-rating"><StarRow rating={ratings[product.id].average} />{ratings[product.id].average.toFixed(1)}</p>}
                       <div className="product-actions">
-                          <button type="button" className="product-add" onClick={() => updateQuantity(product.id, 1)} aria-label={`Add ${product.name} to cart`} disabled={!product.stock} title={!product.stock ? "Out of stock" : undefined}><Plus size={15} />Add to cart</button>
+                        <button type="button" className="product-add" onClick={() => updateQuantity(product.id, 1)} aria-label={`Add ${product.name} to cart`} disabled={!product.stock}>Add to cart</button>
                         <button type="button" className="product-buy-now" onClick={() => startBuyNow(product)} disabled={!product.stock}>Buy now</button>
                       </div>
                     </div>
@@ -664,23 +678,15 @@ export default function Home() {
         <div className="modal-backdrop preview-backdrop" onClick={() => setPreviewProduct(null)}>
           <article className="preview-modal" role="dialog" aria-modal="true" aria-labelledby="product-details-title" onClick={(event) => event.stopPropagation()}>
             <button type="button" className="modal-close" ref={previewCloseButton} onClick={() => setPreviewProduct(null)} aria-label="Close product details"><X size={20} /></button>
+            <div className="preview-scroll">
             <div className="preview-gallery" aria-label="Product photos">
-              <img src={(previewProduct.images[previewImageIndex] ?? previewProduct.image)} alt={`${previewProduct.name} photo ${previewImageIndex + 1} of ${Math.min(previewProduct.images.length, 3)}`} />
-              {previewProduct.images.length > 1 && <button type="button" className="gallery-arrow previous" onClick={() => setPreviewImageIndex((index) => (index - 1 + previewProduct.images.length) % previewProduct.images.length)} aria-label="Show previous photo"><ChevronLeft size={20} /></button>}
-              {previewProduct.images.length > 1 && <button type="button" className="gallery-arrow next" onClick={() => setPreviewImageIndex((index) => (index + 1) % previewProduct.images.length)} aria-label="Show next photo"><ChevronRight size={20} /></button>}
-              <span className="gallery-count">{previewImageIndex + 1} / {previewProduct.images.length}</span>
-              <div className="gallery-thumbnails" aria-label="Product photos">
-                {previewProduct.images.slice(0, 3).map((image, index) => (
-                  <button type="button" key={`${image}-${index}`} className={previewImageIndex === index ? "gallery-thumbnail active" : "gallery-thumbnail"} onClick={() => setPreviewImageIndex(index)} aria-label={`Show photo ${index + 1}`} aria-pressed={previewImageIndex === index}>
-                    <img src={image} alt="" />
-                  </button>
-                ))}
-              </div>
+              <PhotoSwipe key={previewProduct.id} images={previewProduct.images.length ? previewProduct.images : [previewProduct.image]} label={previewProduct.name} />
             </div>
             <div className="preview-info">
               <p className="preview-category">{previewProduct.category}</p>
               <h2 id="product-details-title">{previewProduct.name}</h2>
               <strong className="preview-price">{formatNaira(previewProduct.price)}</strong>
+              <ProductReviews productId={previewProduct.id} onSignIn={() => { setPreviewProduct(null); openAccount(); }} />
               <span className={previewProduct.availability === "Low stock" ? "preview-availability low-stock" : "preview-availability"}>
                 <span aria-hidden="true" />
                 {previewProduct.availability || "Check availability"}
@@ -693,12 +699,13 @@ export default function Home() {
                   <button type="button" onClick={() => setPreviewQuantity((quantity) => Math.min(previewProduct.stock ?? quantity + 1, quantity + 1))} aria-label="Increase quantity" disabled={previewProduct.stock !== undefined && previewQuantity >= previewProduct.stock}><Plus size={13} /></button>
                 </div>
               </div>
+              <p className="preview-hint">Add to cart to choose WhatsApp ordering or Paystack when available.</p>
               <div className="preview-actions">
                 <button type="button" className="preview-save" onClick={() => toggleSaved(previewProduct.id)}><Heart size={17} fill={saved.includes(previewProduct.id) ? "currentColor" : "none"} />{saved.includes(previewProduct.id) ? "Saved" : "Save part"}</button>
                 <button type="button" className="preview-add" disabled={!previewProduct.stock || previewQuantity > (previewProduct.stock ?? 0)} onClick={() => { updateQuantity(previewProduct.id, previewQuantity); setPreviewProduct(null); setCartOpen(true); }}><ShoppingBag size={17} />Add to cart</button>
                 <button type="button" className="preview-buy-now" disabled={!previewProduct.stock || previewQuantity > (previewProduct.stock ?? 0)} onClick={() => startBuyNow(previewProduct, previewQuantity)}>Buy now</button>
               </div>
-              <p className="preview-hint">Add to cart to choose WhatsApp ordering or Paystack when available.</p>
+            </div>
             </div>
           </article>
         </div>
@@ -710,7 +717,7 @@ export default function Home() {
             <div className="saved-header"><div><p>Saved parts</p><h2>{saved.length} {saved.length === 1 ? "part" : "parts"}</h2></div><button onClick={() => setSavedOpen(false)} aria-label="Close saved parts"><X size={20} /></button></div>
             <div className="saved-content">
               {savedItems.length === 0 ? <div className="empty-saved"><Heart size={34} /><h3>No saved parts</h3><p>Tap the heart on any part to save it here.</p></div> : savedItems.map((item) => (
-                <div className="saved-item" key={item.id}><button className="saved-image" onClick={() => { setSavedOpen(false); setPreviewImageIndex(0); setPreviewProduct(item); }}><img src={item.image} alt={item.name} /></button><div><p>{item.category}</p><h3>{item.name}</h3><strong>{formatNaira(item.price)}</strong><button onClick={() => updateQuantity(item.id, 1)}>Add to cart</button></div><button className="saved-remove" onClick={() => toggleSaved(item.id)} aria-label={`Remove ${item.name}`}><X size={15} /></button></div>
+                <div className="saved-item" key={item.id}><button className="saved-image" onClick={() => { setSavedOpen(false); setPreviewProduct(item); }}><img src={item.image} alt={item.name} /></button><div><p>{item.category}</p><h3>{item.name}</h3><strong>{formatNaira(item.price)}</strong><button onClick={() => updateQuantity(item.id, 1)}>Add to cart</button></div><button className="saved-remove" onClick={() => toggleSaved(item.id)} aria-label={`Remove ${item.name}`}><X size={15} /></button></div>
               ))}
             </div>
           </aside>

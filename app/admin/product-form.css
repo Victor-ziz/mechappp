@@ -14,4 +14,10 @@
 .admin-car-card p { margin: 4px 0 0; color: #747d71; font-size: 12px; }
 .admin-car-rename { display: flex; gap: 8px; }
 .admin-car-rename input { flex: 1; min-width: 0; height: 42px; padding: 0 10px; border: 1px solid #dfe4dc; border-radius: 6px; font-size: 16px; }
-.admin-car-rename button { min-height: 42px; padding: 0 12px; border: 1px solid #dfe4dc; border-radius: 6px; background: #fff; font-size: 12px; font-weight: 700; }
+.admin-review-card { display: grid; gap: 12px; }
+.admin-review-card h2 { margin: 0; font-size: 16px; }
+.admin-review-card p { margin: 8px 0 0; font-size: 14px; line-height: 1.5; }
+.admin-review-card time { display: block; margin-top: 8px; color: #7a8376; font-size: 11px; }
+.admin-review-actions { display: flex; gap: 8px; }
+.admin-review-actions button { min-height: 40px; padding: 0 12px; border: 1px solid #dfe4dc; border-radius: 6px; background: #fff; font-size: 12px; font-weight: 700; }
+.admin-review-actions button:first-child { border-color: #58664f; background: #58664f; color: #fff; }
