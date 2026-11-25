@@ -39,6 +39,25 @@ export default function ResetPasswordForm() {
         setChecking(false);
         return;
       }
+
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const accessToken = hash.get("access_token");
+      const refreshToken = hash.get("refresh_token");
+      if (accessToken && refreshToken) {
+        await client.auth.getSession();
+        if (!active) return;
+        const { data, error: sessionError } = await client.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (!active) return;
+        window.history.replaceState(window.history.state, "", window.location.pathname);
+        if (sessionError || !data.session) setError("This reset link is invalid or has expired. Request a new one.");
+        else setReady(true);
+        setChecking(false);
+        return;
+      }
+
       const { data } = await client.auth.getSession();
       if (!active) return;
       if (data.session) setReady(true);
@@ -80,7 +99,7 @@ export default function ResetPasswordForm() {
         <p className="admin-eyebrow">FRAN6</p>
         <h1>Choose a new password</h1>
         {checking && <p>Checking your reset link…</p>}
-        {!checking && !ready && !notice && (
+        {!checking && !ready && !notice && !error && (
           <p>Open the reset link in your email, or request a new one from sign-in.</p>
         )}
         {error && <p className="admin-alert" role="alert">{error}</p>}
