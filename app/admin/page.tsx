@@ -5,7 +5,7 @@ import AdminAccess from "./access";
 import AdminDashboard from "./dashboard";
 import { canAccess, permissionsFor, storeRole } from "../../lib/admin/access";
 import type { AdminCustomer, AdminOrder, AdminProduct, AdminReview, StoreAccount } from "../../lib/admin/types";
-import { createSupabaseAdminClient, listStoreAccounts, storeHasAdmin } from "../../lib/supabase/admin";
+import { createSupabaseAdminClient, listCustomerPhones, listStoreAccounts, storeHasAdmin } from "../../lib/supabase/admin";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -72,7 +72,7 @@ async function AdminPageContent() {
   const empty = Promise.resolve({ data: [], error: null });
   const [productsResult, ordersResult, customersResult, reviewsResult, accounts] = await Promise.all([
     canAccess(user, "products") ? database.from("products").select("id,name,category,price,image,images,stock,active,created_at").order("id") : empty,
-    canAccess(user, "orders") ? database.from("orders").select("id,reference,customer_name,customer_email,channel,status,total,items,created_at").order("created_at", { ascending: false }).limit(100) : empty,
+    canAccess(user, "orders") ? database.from("orders").select("id,reference,customer_id,customer_name,customer_email,channel,status,total,items,created_at").order("created_at", { ascending: false }).limit(100) : empty,
     canAccess(user, "customers") ? database.from("customer_profiles").select("id,email,full_name,created_at").order("created_at", { ascending: false }).limit(200) : empty,
     canAccess(user, "reviews") ? database.from("reviews").select("id,product_id,customer_name,rating,comment,status,created_at,products(name)").order("created_at", { ascending: false }).limit(100) : empty,
     role === "admin" ? listStoreAccounts() : Promise.resolve([] as StoreAccount[]),
@@ -88,11 +88,30 @@ async function AdminPageContent() {
     );
   }
 
+  const phones = canAccess(user, "orders") || canAccess(user, "customers") ? await listCustomerPhones() : {};
+  const savedOrderPhones: Record<string, string> = {};
+  if (canAccess(user, "orders")) {
+    const phoneColumn = await database.from("orders").select("id,customer_phone").limit(100);
+    if (!phoneColumn.error) {
+      for (const row of phoneColumn.data ?? []) {
+        if (typeof row.customer_phone === "string" && row.customer_phone.trim()) savedOrderPhones[row.id] = row.customer_phone.trim();
+      }
+    }
+  }
+  const orders = ((ordersResult.data ?? []) as Array<AdminOrder & { customer_id?: string | null }>).map((order) => ({
+    ...order,
+    customer_phone: savedOrderPhones[order.id] || (order.customer_id ? phones[order.customer_id] : "") || "",
+  }));
+  const customers = ((customersResult.data ?? []) as AdminCustomer[]).map((customer) => ({
+    ...customer,
+    phone: phones[customer.id] || "",
+  }));
+
   return (
     <AdminDashboard
       products={(productsResult.data ?? []) as AdminProduct[]}
-      orders={(ordersResult.data ?? []) as AdminOrder[]}
-      customers={(customersResult.data ?? []) as AdminCustomer[]}
+      orders={orders}
+      customers={customers}
       reviews={(reviewsResult.data ?? []) as AdminReview[]}
       reviewsError={reviewsResult.error ? "Reviews are not ready yet. Run supabase/migrations/202611240001_reviews.sql in the Supabase SQL editor." : ""}
       adminEmail={user.email ?? ""}

@@ -22,6 +22,7 @@ export type AdminOrder = {
   reference: string;
   customer_name: string;
   customer_email: string;
+  customer_phone: string;
   channel: "paystack" | "whatsapp";
   status: "whatsapp_requested" | "awaiting_payment" | "paid" | "processing" | "completed" | "cancelled";
   total: number;
@@ -33,6 +34,7 @@ export type AdminCustomer = {
   id: string;
   email: string;
   full_name: string;
+  phone: string;
   created_at: string;
 };
 

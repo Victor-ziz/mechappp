@@ -246,7 +246,7 @@ export default function AdminDashboard({
             {orders.map((order) => (
               <article className="admin-panel admin-order-card" key={order.id}>
                 <div className="admin-order-heading">
-                  <div><p className="admin-eyebrow">{order.reference} · {order.channel}</p><h2>{order.customer_name}</h2><a href={`mailto:${order.customer_email}`}>{order.customer_email}</a></div>
+                  <div><p className="admin-eyebrow">{order.reference} · {order.channel}</p><h2>{order.customer_name}</h2><a href={`mailto:${order.customer_email}`}>{order.customer_email}</a>{order.customer_phone && <a href={`tel:${order.customer_phone}`}>{order.customer_phone}</a>}</div>
                   <strong>{formatNaira(order.total)}</strong>
                 </div>
                 <div className="admin-order-items">{(order.items as AdminOrderItem[]).map((item) => <p key={`${order.id}-${item.id}`}>{item.name} × {item.quantity}<span>{formatNaira(item.price * item.quantity)}</span></p>)}</div>
@@ -290,7 +290,7 @@ export default function AdminDashboard({
             {customers.map((customer) => (
               <article className="admin-customer-card" key={customer.id}>
                 <span className="admin-customer-avatar">{(customer.full_name || customer.email).slice(0, 1).toUpperCase()}</span>
-                <div><h2>{customer.full_name || "Customer"}</h2><a href={`mailto:${customer.email}`}>{customer.email}</a></div>
+                <div><h2>{customer.full_name || "Customer"}</h2><a href={`mailto:${customer.email}`}>{customer.email}</a>{customer.phone && <a href={`tel:${customer.phone}`}>{customer.phone}</a>}</div>
                 <time dateTime={customer.created_at}>Joined {formatDate(customer.created_at)}</time>
               </article>
             ))}

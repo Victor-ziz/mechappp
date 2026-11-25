@@ -26,6 +26,13 @@ declare global {
   }
 }
 
+const savedPhone = (user: User | null | undefined) => typeof user?.user_metadata.phone === "string" ? user.user_metadata.phone : "";
+const phoneDigits = (value: string) => value.replace(/\D/g, "");
+const phoneIsValid = (value: string) => {
+  const digits = phoneDigits(value);
+  return digits.length >= 10 && digits.length <= 15;
+};
+
 type Product = {
   id: number;
   name: string;
@@ -69,11 +76,13 @@ export default function Home() {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutProduct, setCheckoutProduct] = useState<(Product & { quantity: number }) | null>(null);
   const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"sign-in" | "sign-up">("sign-in");
   const [authName, setAuthName] = useState("");
+  const [authPhone, setAuthPhone] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
@@ -284,6 +293,7 @@ export default function Home() {
 
     if (pendingCardCheckout) {
       setCustomerName(typeof user.user_metadata.full_name === "string" ? user.user_metadata.full_name : "");
+      setCustomerPhone(savedPhone(user));
       setCustomerEmail(user.email ?? "");
       setCheckoutOpen(true);
       setPendingCardCheckout(false);
@@ -303,11 +313,15 @@ export default function Home() {
 
     try {
       if (authMode === "sign-up") {
+        if (!phoneIsValid(authPhone)) {
+          setAuthError("Enter a phone number with at least 10 digits.");
+          return;
+        }
         const { data, error } = await supabase.auth.signUp({
           email: authEmail.trim(),
           password: authPassword,
           options: {
-            data: { full_name: authName.trim() },
+            data: { full_name: authName.trim(), phone: authPhone.trim() },
             emailRedirectTo: window.location.origin,
           },
         });
@@ -320,13 +334,34 @@ export default function Home() {
           setAuthMode("sign-in");
           setAuthNotice("Account created. Check your email to confirm it, then sign in to continue.");
         }
-      } else {
+      } else if (authEmail.includes("@")) {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: authEmail.trim(),
           password: authPassword,
         });
         if (error) setAuthError(error.message);
         else if (data.user) finishSignIn(data.user);
+      } else {
+        if (!phoneIsValid(authEmail)) {
+          setAuthError("Enter your email or a phone number with at least 10 digits.");
+          return;
+        }
+        const response = await fetch("/api/auth/sign-in", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ phone: authEmail.trim(), password: authPassword }),
+        });
+        const result = await response.json() as { error?: string; access_token?: string; refresh_token?: string };
+        if (!response.ok || !result.access_token || !result.refresh_token) {
+          setAuthError(result.error || "Invalid login credentials.");
+          return;
+        }
+        const { data, error } = await supabase.auth.setSession({
+          access_token: result.access_token,
+          refresh_token: result.refresh_token,
+        });
+        if (error || !data.user) setAuthError(error?.message || "Invalid login credentials.");
+        else finishSignIn(data.user);
       }
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Could not complete sign-in. Please try again.");
@@ -366,6 +401,7 @@ export default function Home() {
     }
 
     setCustomerName(typeof authUser.user_metadata.full_name === "string" ? authUser.user_metadata.full_name : "");
+    setCustomerPhone(savedPhone(authUser));
     setCustomerEmail(authUser.email ?? "");
     setCheckoutOpen(true);
   };
@@ -375,6 +411,7 @@ export default function Home() {
     setOrderError("");
     setCheckoutProduct({ ...product, quantity });
     setCustomerName(typeof authUser?.user_metadata.full_name === "string" ? authUser.user_metadata.full_name : "");
+    setCustomerPhone(savedPhone(authUser));
     setCustomerEmail(authUser?.email ?? "");
     setPreviewProduct(null);
     setCartOpen(false);
@@ -383,12 +420,28 @@ export default function Home() {
 
   const createStoreOrder = async (channel: "paystack" | "whatsapp", items: { id: number; quantity: number }[]) => {
     if (!supabase) throw new Error("Order database is not configured.");
-    const { data, error } = await supabase.rpc("create_store_order", {
-      p_customer_name: channel === "paystack" ? customerName.trim() : authUser?.user_metadata.full_name ?? "",
-      p_customer_email: channel === "paystack" ? authUser?.email ?? "" : authUser?.email ?? "",
+    const phone = (channel === "paystack" ? customerPhone : customerPhone || savedPhone(authUser)).trim();
+    if (authUser && phone && phone !== savedPhone(authUser)) {
+      await supabase.auth.updateUser({ data: { phone } });
+    }
+    const orderInput = {
+      p_customer_name: channel === "paystack" ? customerName.trim() : (typeof authUser?.user_metadata.full_name === "string" ? authUser.user_metadata.full_name : ""),
+      p_customer_email: authUser?.email ?? "",
+      p_customer_phone: phone,
       p_channel: channel,
       p_items: items.map(({ id, quantity }) => ({ id, quantity })),
-    });
+    };
+    let { data, error } = await supabase.rpc("create_store_order", orderInput);
+    if (error && (error.code === "PGRST202" || /p_customer_phone|could not find the function/i.test(error.message))) {
+      const retry = await supabase.rpc("create_store_order", {
+        p_customer_name: orderInput.p_customer_name,
+        p_customer_email: orderInput.p_customer_email,
+        p_channel: channel,
+        p_items: orderInput.p_items,
+      });
+      data = retry.data;
+      error = retry.error;
+    }
     if (error) {
       const missingOrderFunction = error.code === "PGRST202" || error.message.includes("create_store_order");
       throw new Error(missingOrderFunction
@@ -457,6 +510,10 @@ export default function Home() {
       setCheckoutError("Add your full name to your account to continue.");
       return;
     }
+    if (!phoneIsValid(customerPhone)) {
+      setCheckoutError("Enter a phone number with at least 10 digits.");
+      return;
+    }
 
     setCheckoutError("");
     let order: { reference: string; total: number };
@@ -491,11 +548,12 @@ export default function Home() {
 
   const savedItems = storeProducts.filter((product) => saved.includes(product.id));
 
+  const callerPhone = customerPhone.trim() || savedPhone(authUser);
   const whatsappMessage = encodeURIComponent(
-    `Hello FRAN6, I would like to order:\n${cartItems.map((item) => `• ${item.name} × ${item.quantity} — ${formatNaira(item.price * item.quantity)}`).join("\n")}\n\nSubtotal: ${formatNaira(subtotal)}\nPlease confirm availability, delivery options and payment details.`
+    `Hello FRAN6, I would like to order:\n${cartItems.map((item) => `• ${item.name} × ${item.quantity} — ${formatNaira(item.price * item.quantity)}`).join("\n")}\n\nSubtotal: ${formatNaira(subtotal)}${savedPhone(authUser) ? `\nPhone: ${savedPhone(authUser)}` : ""}\nPlease confirm availability, delivery options and payment details.`
   );
   const checkoutWhatsappMessage = encodeURIComponent(
-    `Hello FRAN6, I would like to order:\n${checkoutItems.map((item) => `• ${item.name} × ${item.quantity} — ${formatNaira(item.price * item.quantity)}`).join("\n")}\n\nSubtotal: ${formatNaira(checkoutSubtotal)}\nPlease confirm availability, delivery options and payment details.`
+    `Hello FRAN6, I would like to order:\n${checkoutItems.map((item) => `• ${item.name} × ${item.quantity} — ${formatNaira(item.price * item.quantity)}`).join("\n")}\n\nSubtotal: ${formatNaira(checkoutSubtotal)}${callerPhone ? `\nPhone: ${callerPhone}` : ""}\nPlease confirm availability, delivery options and payment details.`
   );
 
   return (
@@ -733,6 +791,7 @@ export default function Home() {
                 <p className="checkout-label">Your FRAN6 account</p>
                 <h2 id="account-title">You&apos;re signed in</h2>
                 <p className="account-email">{authUser.email}</p>
+                {savedPhone(authUser) && <p className="account-email">{savedPhone(authUser)}</p>}
                 {(authUser.app_metadata.role === "admin" || authUser.app_metadata.role === "staff") && <a className="admin-account-link" href="/admin"><ShieldCheck size={17} />Open admin dashboard</a>}
                 {pendingCardCheckout && <p className="auth-notice" role="status">Sign-in complete. Continue with card checkout when it is available.</p>}
                 <button type="button" className="account-signout" onClick={signOut} disabled={authBusy}>
@@ -746,7 +805,7 @@ export default function Home() {
                 <p className="auth-intro">
                   {pendingCardCheckout
                     ? "Sign in or create an account to continue with card payment. WhatsApp orders do not need an account."
-                    : "Sign in to your account, or create one for faster card checkout. WhatsApp orders are always available as a guest."}
+                    : "Sign in with your email or phone number, or create an account for faster card checkout. WhatsApp orders are always available as a guest."}
                 </p>
                 <div className="auth-tabs" role="tablist" aria-label="Account options">
                   <button type="button" role="tab" aria-selected={authMode === "sign-in"} className={authMode === "sign-in" ? "active" : ""} onClick={() => { setAuthMode("sign-in"); setAuthError(""); setAuthNotice(""); }}>Sign in</button>
@@ -761,9 +820,12 @@ export default function Home() {
                 {authError && <p className="auth-error" role="alert">{authError}</p>}
                 <form className="auth-form" onSubmit={handleAuthSubmit}>
                   {authMode === "sign-up" && (
-                    <label>Full name<input value={authName} onChange={(event) => setAuthName(event.target.value)} placeholder="Your name" autoComplete="name" required disabled={!isSupabaseConfigured || authBusy} /></label>
+                    <>
+                      <label>Full name<input value={authName} onChange={(event) => setAuthName(event.target.value)} placeholder="Your name" autoComplete="name" required disabled={!isSupabaseConfigured || authBusy} /></label>
+                      <label>Phone number<input type="tel" value={authPhone} onChange={(event) => setAuthPhone(event.target.value)} placeholder="0803 000 0000" autoComplete="tel" inputMode="tel" required disabled={!isSupabaseConfigured || authBusy} /></label>
+                    </>
                   )}
-                  <label>Email address<input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="you@example.com" autoComplete="email" required disabled={!isSupabaseConfigured || authBusy} /></label>
+                  <label>{authMode === "sign-up" ? "Email address" : "Email or phone"}<input type={authMode === "sign-up" ? "email" : "text"} value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder={authMode === "sign-up" ? "you@example.com" : "Email or 0803 000 0000"} autoComplete={authMode === "sign-up" ? "email" : "username"} inputMode={authMode === "sign-up" ? "email" : "text"} required disabled={!isSupabaseConfigured || authBusy} /></label>
                   <label>Password<input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder={authMode === "sign-up" ? "At least 8 characters" : "Your password"} autoComplete={authMode === "sign-up" ? "new-password" : "current-password"} minLength={authMode === "sign-up" ? 8 : undefined} required disabled={!isSupabaseConfigured || authBusy} /></label>
                   <button type="submit" className="auth-submit" disabled={!isSupabaseConfigured || authBusy}>
                     {authBusy ? "Please wait…" : authMode === "sign-up" ? "Create account" : "Sign in"}
@@ -790,6 +852,7 @@ export default function Home() {
             {authUser ? (
               <>
                 <label>Full name<input value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Your name" required /></label>
+                <label>Phone number<input type="tel" value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="0803 000 0000" autoComplete="tel" inputMode="tel" required /></label>
                 <label>Account email<input type="email" value={customerEmail} readOnly required /></label>
               </>
             ) : (
