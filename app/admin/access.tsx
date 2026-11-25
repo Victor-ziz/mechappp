@@ -1,68 +1,64 @@
 "use client";
 
-import { useState, useTransition, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import "./access.css";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase/client";
 import { createFirstAdmin } from "./actions";
 
 export default function AdminAccess({ mode }: { mode: "setup" | "sign-in" | "forbidden" }) {
-  const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [busy, startTransition] = useTransition();
+  const [busy, setBusy] = useState(false);
 
-  const signIn = (event: FormEvent<HTMLFormElement>) => {
+  const signIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!supabase) {
       setError("Supabase is not configured in this app.");
       return;
     }
-    const client = supabase;
     setError("");
-    startTransition(async () => {
-      const { error: signInError } = await client.auth.signInWithPassword({ email: email.trim(), password });
-      if (signInError) {
-        setError(signInError.message);
-        return;
-      }
-      router.refresh();
-    });
+    setBusy(true);
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (signInError) {
+      setError(signInError.message);
+      setBusy(false);
+      return;
+    }
+    window.location.assign("/admin");
   };
 
-  const createAdmin = (event: FormEvent<HTMLFormElement>) => {
+  const createAdmin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
-    startTransition(async () => {
-      const result = await createFirstAdmin({ fullName, email, password });
-      if (!result.success) {
-        setError(result.error || "Could not create the admin account.");
-        return;
-      }
-      if (!supabase) {
-        setError("Admin account created. Sign in from this page.");
-        router.refresh();
-        return;
-      }
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-      if (signInError) {
-        setError(signInError.message);
-        return;
-      }
-      router.refresh();
-    });
+    setBusy(true);
+    const result = await createFirstAdmin({ fullName, email, password });
+    if (!result.success) {
+      setError(result.error || "Could not create the admin account.");
+      setBusy(false);
+      return;
+    }
+    if (!supabase) {
+      setError("Admin account created. Sign in from this page.");
+      setBusy(false);
+      return;
+    }
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (signInError) {
+      setError(signInError.message);
+      setBusy(false);
+      return;
+    }
+    window.location.assign("/admin");
   };
 
-  const signOut = () => {
+  const signOut = async () => {
     if (!supabase) return;
-    const client = supabase;
-    startTransition(async () => {
-      await client.auth.signOut();
-      router.refresh();
-    });
+    setBusy(true);
+    await supabase.auth.signOut();
+    window.location.assign("/admin");
   };
 
   return (
@@ -96,8 +92,8 @@ export default function AdminAccess({ mode }: { mode: "setup" | "sign-in" | "for
         )}
         {mode === "forbidden" && (
           <>
-            <h1>Admin access only</h1>
-            <p>This account can shop, but it is not allowed to manage the store.</p>
+            <h1>No store access</h1>
+            <p>This account can shop, but it is not allowed to manage the store. Ask the admin if you need staff access.</p>
             {error && <p className="admin-alert" role="alert">{error}</p>}
             <button className="admin-primary-button" type="button" onClick={signOut} disabled={busy}>{busy ? "Signing out…" : "Sign out"}</button>
           </>

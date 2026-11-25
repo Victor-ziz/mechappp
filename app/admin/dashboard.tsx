@@ -5,20 +5,23 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Boxes, Car, CircleDollarSign, ClipboardList, LayoutDashboard, LogOut, PackagePlus, ShieldCheck, Star, Users } from "lucide-react";
+import type { StaffPermission } from "../../lib/admin/access";
 import { supabase } from "../../lib/supabase/client";
-import type { AdminCustomer, AdminOrder, AdminOrderItem, AdminProduct, AdminReview } from "../../lib/admin/types";
+import type { AdminCustomer, AdminOrder, AdminOrderItem, AdminProduct, AdminReview, StoreAccount } from "../../lib/admin/types";
 import { moderateReview, renameCar, setProductActive, updateOrderStatus } from "./actions";
 import ProductForm from "./product-form";
+import StaffPanel from "./staff-panel";
 
-type Section = "overview" | "cars" | "products" | "orders" | "reviews" | "customers";
+type Section = "overview" | "cars" | "products" | "orders" | "reviews" | "customers" | "staff";
 
-const sections: { id: Section; label: string; icon: typeof LayoutDashboard }[] = [
+const sections: { id: Section; label: string; icon: typeof LayoutDashboard; permission?: StaffPermission }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "cars", label: "Cars", icon: Car },
-  { id: "products", label: "Parts & stock", icon: Boxes },
-  { id: "orders", label: "Orders", icon: ClipboardList },
-  { id: "reviews", label: "Reviews", icon: Star },
-  { id: "customers", label: "Customers", icon: Users },
+  { id: "cars", label: "Cars", icon: Car, permission: "products" },
+  { id: "products", label: "Parts & stock", icon: Boxes, permission: "products" },
+  { id: "orders", label: "Orders", icon: ClipboardList, permission: "orders" },
+  { id: "reviews", label: "Reviews", icon: Star, permission: "reviews" },
+  { id: "customers", label: "Customers", icon: Users, permission: "customers" },
+  { id: "staff", label: "Staff", icon: ShieldCheck },
 ];
 
 const statuses: AdminOrder["status"][] = [
@@ -44,6 +47,10 @@ export default function AdminDashboard({
   reviews,
   reviewsError,
   adminEmail,
+  role,
+  permissions,
+  currentUserId,
+  accounts,
 }: {
   products: AdminProduct[];
   orders: AdminOrder[];
@@ -51,6 +58,10 @@ export default function AdminDashboard({
   reviews: AdminReview[];
   reviewsError: string;
   adminEmail: string;
+  role: "admin" | "staff";
+  permissions: StaffPermission[];
+  currentUserId: string;
+  accounts: StoreAccount[];
 }) {
   const router = useRouter();
   const [section, setSection] = useState<Section>("overview");
@@ -76,6 +87,14 @@ export default function AdminDashboard({
   };
 
   const cars = [...new Set(products.map((product) => product.category))].sort((a, b) => a.localeCompare(b));
+  const visibleSections = sections.filter((item) => {
+    if (item.id === "staff") return role === "admin" || role === "staff";
+    if (!item.permission) return true;
+    return permissions.includes(item.permission);
+  }).map((item) => item.id === "staff" && role === "staff" ? { ...item, label: "Password" } : item);
+  const showProducts = permissions.includes("products");
+  const showOrders = permissions.includes("orders");
+  const showCustomers = permissions.includes("customers");
 
   const updateProductActive = (product: AdminProduct) => {
     startTransition(async () => {
@@ -100,8 +119,7 @@ export default function AdminDashboard({
         setError(signOutError.message);
         return;
       }
-      router.replace("/");
-      router.refresh();
+      window.location.assign("/admin");
     });
   };
 
@@ -113,7 +131,7 @@ export default function AdminDashboard({
           <span>Store admin</span>
         </Link>
         <nav className="admin-nav" aria-label="Admin sections">
-          {sections.map(({ id, label, icon: Icon }) => (
+          {visibleSections.map(({ id, label, icon: Icon }) => (
             <button type="button" className={section === id ? "active" : ""} key={id} onClick={() => { setSection(id); setEditing(null); }}>
               <Icon size={18} />{label}
               {id === "orders" && orders.length > 0 && <span className="admin-nav-count">{orders.length}</span>}
@@ -121,7 +139,7 @@ export default function AdminDashboard({
           ))}
         </nav>
         <div className="admin-sidebar-bottom">
-          <p><ShieldCheck size={16} /> Signed in as admin</p>
+          <p><ShieldCheck size={16} /> Signed in as {role === "admin" ? "admin" : "staff"}</p>
           <span>{adminEmail}</span>
           <button type="button" onClick={signOut} disabled={busy}><LogOut size={16} />Sign out</button>
           <Link href="/"><ArrowLeft size={16} />Back to shop</Link>
@@ -132,9 +150,9 @@ export default function AdminDashboard({
         <header className="admin-topbar">
           <div>
             <p className="admin-eyebrow">FRAN6 control room</p>
-            <h1>{sections.find((item) => item.id === section)?.label}</h1>
+            <h1>{visibleSections.find((item) => item.id === section)?.label}</h1>
           </div>
-          {(section === "products" || section === "cars") && !editing && (
+          {showProducts && (section === "products" || section === "cars") && !editing && (
             <button type="button" className="admin-primary-button" onClick={() => { setSection("products"); setEditing("new"); }}>
               <PackagePlus size={17} />Add part
             </button>
@@ -147,10 +165,10 @@ export default function AdminDashboard({
         {section === "overview" && (
           <div className="admin-content">
             <div className="admin-stats">
-              <article><span><Boxes size={17} />Active products</span><strong>{products.filter((product) => product.active).length}</strong></article>
-              <article><span><ClipboardList size={17} />Recent orders</span><strong>{orders.length}</strong></article>
-              <article><span><Users size={17} />Recent customers</span><strong>{customers.length}</strong></article>
-              <article><span><CircleDollarSign size={17} />Sales in recent orders</span><strong>{formatNaira(paidSales)}</strong></article>
+              {showProducts && <article><span><Boxes size={17} />Active products</span><strong>{products.filter((product) => product.active).length}</strong></article>}
+              {showOrders && <article><span><ClipboardList size={17} />Recent orders</span><strong>{orders.length}</strong></article>}
+              {showCustomers && <article><span><Users size={17} />Recent customers</span><strong>{customers.length}</strong></article>}
+              {showOrders && <article><span><CircleDollarSign size={17} />Sales in recent orders</span><strong>{formatNaira(paidSales)}</strong></article>}
             </div>
             <section className="admin-panel">
               <div className="admin-panel-heading">
@@ -158,14 +176,14 @@ export default function AdminDashboard({
                 <span className={lowStock ? "admin-status warning" : "admin-status"}>{lowStock} low-stock</span>
               </div>
               <div className="admin-attention-grid">
-                <div><h3>Low stock</h3>{products.filter((product) => product.active && product.stock <= 3).length === 0
+                {showProducts && <div><h3>Low stock</h3>{products.filter((product) => product.active && product.stock <= 3).length === 0
                   ? <p className="admin-muted">All active products have more than 3 in stock.</p>
                   : products.filter((product) => product.active && product.stock <= 3).map((product) => <p className="admin-attention-row" key={product.id}><span>{product.name}</span><strong>{product.stock} left</strong></p>)}
-                </div>
-                <div><h3>Latest orders</h3>{orders.slice(0, 5).length === 0
+                </div>}
+                {showOrders && <div><h3>Latest orders</h3>{orders.slice(0, 5).length === 0
                   ? <p className="admin-muted">No orders yet.</p>
                   : orders.slice(0, 5).map((order) => <p className="admin-attention-row" key={order.id}><span>{order.customer_name} · {order.reference}</span><strong>{formatNaira(order.total)}</strong></p>)}
-                </div>
+                </div>}
               </div>
             </section>
           </div>
@@ -278,6 +296,18 @@ export default function AdminDashboard({
             ))}
             {customers.length === 0 && <section className="admin-panel admin-empty"><Users size={28} /><h2>No customers yet</h2><p>Customer accounts will appear here after signup.</p></section>}
           </div>
+        )}
+
+        {section === "staff" && (
+          <StaffPanel
+            accounts={accounts}
+            currentUserId={currentUserId}
+            isAdmin={role === "admin"}
+            busy={busy}
+            onDone={(result, message) => {
+              startTransition(async () => finishAction(await result, message));
+            }}
+          />
         )}
       </section>
     </main>

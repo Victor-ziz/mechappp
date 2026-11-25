@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { canAccess } from "../../../../lib/admin/access";
 import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 import { createSupabaseServerClient } from "../../../../lib/supabase/server";
 
@@ -28,8 +29,8 @@ async function ensureBucket() {
 export async function POST(request: NextRequest) {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user || user.app_metadata.role !== "admin") {
-    return NextResponse.json({ error: "Only an admin can upload product photos." }, { status: 403 });
+  if (!user || !canAccess(user, "products")) {
+    return NextResponse.json({ error: "You do not have permission to upload product photos." }, { status: 403 });
   }
 
   let form: FormData;

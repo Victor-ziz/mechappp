@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { canAccess, cleanPermissions, storeRole, type StaffPermission } from "../../lib/admin/access";
 import type { AdminActionResult, AdminOrder } from "../../lib/admin/types";
 import { createSupabaseAdminClient, storeHasAdmin } from "../../lib/supabase/admin";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
@@ -37,12 +38,24 @@ export async function createFirstAdmin(input: {
   return { success: true };
 }
 
-async function requireAdmin() {
+async function currentUser() {
   const supabase = await createSupabaseServerClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error) throw new Error(`Could not verify your account: ${error.message}`);
-  if (!user || user.app_metadata.role !== "admin") throw new Error("You do not have permission to manage the store.");
-  return supabase;
+  if (!user) throw new Error("Sign in to manage the store.");
+  return user;
+}
+
+async function requirePermission(permission: StaffPermission) {
+  const user = await currentUser();
+  if (!canAccess(user, permission)) throw new Error("You do not have permission to do that.");
+  return createSupabaseAdminClient();
+}
+
+async function requireOwner() {
+  const user = await currentUser();
+  if (storeRole(user) !== "admin") throw new Error("Only the store admin can manage staff.");
+  return user;
 }
 
 export async function saveProduct(input: {
@@ -54,7 +67,7 @@ export async function saveProduct(input: {
   images: string[];
   stock: number;
 }): Promise<AdminActionResult> {
-  const supabase = await requireAdmin();
+  const supabase = await requirePermission("products");
   const name = input.name.trim();
   const category = input.category.trim();
   const image = input.image.trim();
@@ -90,7 +103,7 @@ export async function saveProduct(input: {
 }
 
 export async function renameCar(currentName: string, nextName: string): Promise<AdminActionResult> {
-  const supabase = await requireAdmin();
+  const supabase = await requirePermission("products");
   const from = currentName.trim();
   const to = nextName.trim();
   if (!from || !to || to.length > 80) return { success: false, error: "Enter a car name, like Corolla." };
@@ -102,7 +115,7 @@ export async function renameCar(currentName: string, nextName: string): Promise<
 }
 
 export async function setProductActive(id: number, active: boolean): Promise<AdminActionResult> {
-  const supabase = await requireAdmin();
+  const supabase = await requirePermission("products");
   if (!Number.isSafeInteger(id) || id < 1) return { success: false, error: "Invalid product." };
   const { error } = await supabase.from("products").update({ active, updated_at: new Date().toISOString() }).eq("id", id);
   if (error) return { success: false, error: error.message };
@@ -113,7 +126,7 @@ export async function setProductActive(id: number, active: boolean): Promise<Adm
 }
 
 export async function updateOrderStatus(id: string, status: AdminOrder["status"]): Promise<AdminActionResult> {
-  const supabase = await requireAdmin();
+  const supabase = await requirePermission("orders");
   const allowedStatuses: AdminOrder["status"][] = [
     "whatsapp_requested",
     "awaiting_payment",
@@ -134,7 +147,7 @@ export async function updateOrderStatus(id: string, status: AdminOrder["status"]
 }
 
 export async function moderateReview(id: string, status: "approved" | "rejected"): Promise<AdminActionResult> {
-  const supabase = await requireAdmin();
+  const supabase = await requirePermission("reviews");
   if (!/^[0-9a-f-]{36}$/i.test(id) || (status !== "approved" && status !== "rejected")) {
     return { success: false, error: "Invalid review." };
   }
@@ -142,5 +155,96 @@ export async function moderateReview(id: string, status: "approved" | "rejected"
   if (error) return { success: false, error: error.message };
   revalidatePath("/admin");
   revalidatePath("/");
+  return { success: true };
+}
+
+export async function createStaff(input: {
+  fullName: string;
+  email: string;
+  password: string;
+  permissions: string[];
+}): Promise<AdminActionResult> {
+  await requireOwner();
+  const fullName = input.fullName.trim();
+  const email = input.email.trim().toLowerCase();
+  const permissions = cleanPermissions(input.permissions);
+  if (fullName.length < 2 || fullName.length > 80) return { success: false, error: "Enter the staff member's name." };
+  if (!emailPattern.test(email)) return { success: false, error: "Enter a valid email address." };
+  if (input.password.length < 8) return { success: false, error: "Use a password of at least 8 characters." };
+  if (permissions.length === 0) return { success: false, error: "Choose at least one area this person can open." };
+
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin.auth.admin.createUser({
+    email,
+    password: input.password,
+    email_confirm: true,
+    user_metadata: { full_name: fullName },
+    app_metadata: { role: "staff", permissions },
+  });
+  if (error) {
+    const message = /already.+registered|already.+exists/i.test(error.message)
+      ? "That email already has an account. Use a different email for this staff member."
+      : error.message;
+    return { success: false, error: message };
+  }
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+export async function updateStaffAccess(userId: string, permissions: string[]): Promise<AdminActionResult> {
+  await requireOwner();
+  if (!/^[0-9a-f-]{36}$/i.test(userId)) return { success: false, error: "Invalid staff account." };
+  const nextPermissions = cleanPermissions(permissions);
+  if (nextPermissions.length === 0) return { success: false, error: "Choose at least one area, or remove the staff account." };
+
+  const admin = createSupabaseAdminClient();
+  const { data, error: lookupError } = await admin.auth.admin.getUserById(userId);
+  if (lookupError || !data.user) return { success: false, error: lookupError?.message || "Staff account not found." };
+  if (storeRole(data.user) !== "staff") return { success: false, error: "Only a staff account can have limited access." };
+
+  const { error } = await admin.auth.admin.updateUserById(userId, {
+    app_metadata: { role: "staff", permissions: nextPermissions },
+  });
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+export async function resetAccountPassword(userId: string, password: string): Promise<AdminActionResult> {
+  const actor = await currentUser();
+  const actorRole = storeRole(actor);
+  if (!actorRole) return { success: false, error: "You do not have permission to reset passwords." };
+  if (!/^[0-9a-f-]{36}$/i.test(userId)) return { success: false, error: "Invalid account." };
+  if (password.length < 8) return { success: false, error: "Use a password of at least 8 characters." };
+
+  const admin = createSupabaseAdminClient();
+  const { data, error: lookupError } = await admin.auth.admin.getUserById(userId);
+  if (lookupError || !data.user) return { success: false, error: lookupError?.message || "Account not found." };
+  const targetRole = storeRole(data.user);
+  const ownAccount = actor.id === userId;
+  const adminResettingStaff = actorRole === "admin" && targetRole === "staff";
+  if (!ownAccount && !adminResettingStaff) return { success: false, error: "You can reset your own password, or a staff password." };
+
+  const { error } = await admin.auth.admin.updateUserById(userId, { password });
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+export async function removeStaff(userId: string): Promise<AdminActionResult> {
+  const actor = await requireOwner();
+  if (!/^[0-9a-f-]{36}$/i.test(userId)) return { success: false, error: "Invalid staff account." };
+  if (actor.id === userId) return { success: false, error: "You cannot remove your own admin access here." };
+
+  const admin = createSupabaseAdminClient();
+  const { data, error: lookupError } = await admin.auth.admin.getUserById(userId);
+  if (lookupError || !data.user) return { success: false, error: lookupError?.message || "Staff account not found." };
+  if (storeRole(data.user) !== "staff") return { success: false, error: "Only a staff account can be removed." };
+
+  const { error } = await admin.auth.admin.updateUserById(userId, {
+    app_metadata: { role: null, permissions: [] },
+  });
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/admin");
   return { success: true };
 }

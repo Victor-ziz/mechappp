@@ -514,6 +514,15 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .admin-form-grid { display: grid; gap: 12px; }
 .admin-form-grid label { display: grid; gap: 6px; color: #566052; font-size: 11px; font-weight: 700; }
 .admin-form-grid input, .admin-form-grid select, .admin-order-footer select { width: 100%; min-width: 0; height: 42px; padding: 0 10px; border: 1px solid #dfe4dc; border-radius: 6px; background: #fff; color: #242a23; font-size: 14px; }
+.admin-staff { display: grid; gap: 12px; }
+.admin-staff-card { display: grid; gap: 12px; }
+.admin-staff-card h2, .admin-staff h2 { margin: 0 0 8px; font-size: 18px; }
+.staff-permissions { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; }
+.staff-permissions legend { margin-bottom: 2px; color: #566052; font-size: 11px; font-weight: 700; }
+.staff-permissions label { display: flex; align-items: center; gap: 8px; min-height: 36px; color: #242a23; font-size: 14px; font-weight: 600; }
+.admin-form-grid .staff-permissions input { width: 18px; height: 18px; margin: 0; padding: 0; }
+.admin-staff-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-staff-actions button:last-child { min-height: 42px; padding: 0 12px; border: 1px solid #e3c4c0; border-radius: 7px; background: #fff; color: #923e34; font-size: 12px; font-weight: 700; }
 .admin-products-list { display: grid; gap: 10px; }
 .admin-product-card { display: grid; grid-template-columns: 62px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px; border: 1px solid #e4e8e2; border-radius: 9px; background: #fff; }
 .admin-product-card > img { width: 62px; height: 62px; grid-row: span 2; border-radius: 6px; background: #f0f1ee; object-fit: cover; }

@@ -3,9 +3,10 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import AdminAccess from "./access";
 import AdminDashboard from "./dashboard";
-import { storeHasAdmin } from "../../lib/supabase/admin";
+import { canAccess, permissionsFor, storeRole } from "../../lib/admin/access";
+import type { AdminCustomer, AdminOrder, AdminProduct, AdminReview, StoreAccount } from "../../lib/admin/types";
+import { createSupabaseAdminClient, listStoreAccounts, storeHasAdmin } from "../../lib/supabase/admin";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
-import type { AdminCustomer, AdminOrder, AdminProduct, AdminReview } from "../../lib/admin/types";
 
 export const metadata: Metadata = {
   title: "FRAN6 admin",
@@ -63,13 +64,18 @@ async function AdminPageContent() {
     }
     return <AdminAccess mode={hasAdmin ? "sign-in" : "setup"} />;
   }
-  if (user.app_metadata.role !== "admin") return <AdminAccess mode="forbidden" />;
+  const role = storeRole(user);
+  const permissions = permissionsFor(user);
+  if (!role || permissions.length === 0) return <AdminAccess mode="forbidden" />;
 
-  const [productsResult, ordersResult, customersResult, reviewsResult] = await Promise.all([
-    supabase.from("products").select("id,name,category,price,image,images,stock,active,created_at").order("id"),
-    supabase.from("orders").select("id,reference,customer_name,customer_email,channel,status,total,items,created_at").order("created_at", { ascending: false }).limit(100),
-    supabase.from("customer_profiles").select("id,email,full_name,created_at").order("created_at", { ascending: false }).limit(200),
-    supabase.from("reviews").select("id,product_id,customer_name,rating,comment,status,created_at,products(name)").order("created_at", { ascending: false }).limit(100),
+  const database = createSupabaseAdminClient();
+  const empty = Promise.resolve({ data: [], error: null });
+  const [productsResult, ordersResult, customersResult, reviewsResult, accounts] = await Promise.all([
+    canAccess(user, "products") ? database.from("products").select("id,name,category,price,image,images,stock,active,created_at").order("id") : empty,
+    canAccess(user, "orders") ? database.from("orders").select("id,reference,customer_name,customer_email,channel,status,total,items,created_at").order("created_at", { ascending: false }).limit(100) : empty,
+    canAccess(user, "customers") ? database.from("customer_profiles").select("id,email,full_name,created_at").order("created_at", { ascending: false }).limit(200) : empty,
+    canAccess(user, "reviews") ? database.from("reviews").select("id,product_id,customer_name,rating,comment,status,created_at,products(name)").order("created_at", { ascending: false }).limit(100) : empty,
+    role === "admin" ? listStoreAccounts() : Promise.resolve([] as StoreAccount[]),
   ]);
   const dataError = productsResult.error || ordersResult.error || customersResult.error;
   if (dataError) {
@@ -90,6 +96,10 @@ async function AdminPageContent() {
       reviews={(reviewsResult.data ?? []) as AdminReview[]}
       reviewsError={reviewsResult.error ? "Reviews are not ready yet. Run supabase/migrations/202611240001_reviews.sql in the Supabase SQL editor." : ""}
       adminEmail={user.email ?? ""}
+      role={role}
+      permissions={permissions}
+      currentUserId={user.id}
+      accounts={accounts}
     />
   );
 }

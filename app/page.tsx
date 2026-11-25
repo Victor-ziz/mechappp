@@ -519,7 +519,7 @@ export default function Home() {
             {query && <button type="button" className="clear-search" onClick={() => setQuery("")} aria-label="Clear search"><X size={16} /></button>}
           </form>
           <div className="header-actions">
-            {authUser?.app_metadata.role === "admin" && (
+            {(authUser?.app_metadata.role === "admin" || authUser?.app_metadata.role === "staff") && (
               <a className="admin-shortcut" href="/admin" aria-label="Open admin dashboard">
                 <ShieldCheck size={19} /><span>Admin</span>
               </a>
@@ -733,7 +733,7 @@ export default function Home() {
                 <p className="checkout-label">Your FRAN6 account</p>
                 <h2 id="account-title">You&apos;re signed in</h2>
                 <p className="account-email">{authUser.email}</p>
-                {authUser.app_metadata.role === "admin" && <a className="admin-account-link" href="/admin"><ShieldCheck size={17} />Open admin dashboard</a>}
+                {(authUser.app_metadata.role === "admin" || authUser.app_metadata.role === "staff") && <a className="admin-account-link" href="/admin"><ShieldCheck size={17} />Open admin dashboard</a>}
                 {pendingCardCheckout && <p className="auth-notice" role="status">Sign-in complete. Continue with card checkout when it is available.</p>}
                 <button type="button" className="account-signout" onClick={signOut} disabled={authBusy}>
                   <LogOut size={17} />{authBusy ? "Signing out…" : "Sign out"}

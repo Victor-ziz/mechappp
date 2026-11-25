@@ -47,6 +47,14 @@ export type AdminReview = {
   products: { name: string } | { name: string }[] | null;
 };
 
+export type StoreAccount = {
+  id: string;
+  email: string;
+  fullName: string;
+  role: "admin" | "staff";
+  permissions: Array<"products" | "orders" | "reviews" | "customers">;
+};
+
 export type AdminActionResult = {
   success: boolean;
   error?: string;
