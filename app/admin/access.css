@@ -60,10 +60,15 @@
   margin: 0;
 }
 
-.admin-access-back {
-  display: inline-flex;
+.admin-access-back, .admin-text-button {
+  display: flex;
+  width: fit-content;
   margin-top: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #697267;
   font-size: 13px;
   font-weight: 700;
+  text-align: left;
 }

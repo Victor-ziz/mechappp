@@ -11,6 +11,8 @@ export default function AdminAccess({ mode }: { mode: "setup" | "sign-in" | "for
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [forgot, setForgot] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const signIn = async (event: FormEvent<HTMLFormElement>) => {
@@ -61,6 +63,22 @@ export default function AdminAccess({ mode }: { mode: "setup" | "sign-in" | "for
     window.location.assign("/admin");
   };
 
+  const sendReset = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+    setBusy(true);
+    const response = await fetch("/api/auth/reset-password", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ identifier: email.trim() }),
+    });
+    const result = await response.json() as { error?: string; message?: string };
+    setBusy(false);
+    if (!response.ok) setError(result.error || "Could not send the reset link.");
+    else setNotice(result.message || "If an account matches, a reset link is on its way to that email.");
+  };
+
   return (
     <main className="admin-access">
       <section className="admin-access-card">
@@ -80,13 +98,15 @@ export default function AdminAccess({ mode }: { mode: "setup" | "sign-in" | "for
         )}
         {mode === "sign-in" && (
           <>
-            <h1>Store admin</h1>
-            <p>Sign in with the admin account to manage the shop.</p>
-            <form onSubmit={signIn}>
+            <h1>{forgot ? "Reset admin password" : "Store admin"}</h1>
+            <p>{forgot ? "Enter the admin email. The reset link is sent there." : "Sign in with the admin account to manage the shop."}</p>
+            <form onSubmit={forgot ? sendReset : signIn}>
               <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required /></label>
-              <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /></label>
+              {!forgot && <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /></label>}
               {error && <p className="admin-alert" role="alert">{error}</p>}
-              <button className="admin-primary-button" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+              {notice && <p className="admin-notice" role="status">{notice}</p>}
+              <button className="admin-primary-button" type="submit" disabled={busy}>{busy ? "Please wait…" : forgot ? "Send reset link" : "Sign in"}</button>
+              <button className="admin-text-button" type="button" onClick={() => { setForgot((current) => !current); setError(""); setNotice(""); }}>{forgot ? "Back to sign in" : "Forgot password?"}</button>
             </form>
           </>
         )}

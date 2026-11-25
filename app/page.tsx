@@ -80,7 +80,7 @@ export default function Home() {
   const [customerEmail, setCustomerEmail] = useState("");
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<"sign-in" | "sign-up">("sign-in");
+  const [authMode, setAuthMode] = useState<"sign-in" | "sign-up" | "forgot">("sign-in");
   const [authName, setAuthName] = useState("");
   const [authPhone, setAuthPhone] = useState("");
   const [authEmail, setAuthEmail] = useState("");
@@ -312,6 +312,22 @@ export default function Home() {
     setAuthNotice("");
 
     try {
+      if (authMode === "forgot") {
+        const identifier = authEmail.trim();
+        if (!identifier.includes("@") && !phoneIsValid(identifier)) {
+          setAuthError("Enter the email or phone number on the account.");
+          return;
+        }
+        const response = await fetch("/api/auth/reset-password", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ identifier }),
+        });
+        const result = await response.json() as { error?: string; message?: string };
+        if (!response.ok) setAuthError(result.error || "Could not send the reset link.");
+        else setAuthNotice(result.message || "If an account matches, a reset link is on its way to the email for that account.");
+        return;
+      }
       if (authMode === "sign-up") {
         if (!phoneIsValid(authPhone)) {
           setAuthError("Enter a phone number with at least 10 digits.");
@@ -792,6 +808,29 @@ export default function Home() {
                 <h2 id="account-title">You&apos;re signed in</h2>
                 <p className="account-email">{authUser.email}</p>
                 {savedPhone(authUser) && <p className="account-email">{savedPhone(authUser)}</p>}
+                {authNotice && <p className="auth-notice" role="status">{authNotice}</p>}
+                {authError && <p className="auth-error" role="alert">{authError}</p>}
+                <form className="auth-form" onSubmit={async (event) => {
+                  event.preventDefault();
+                  if (!supabase) return;
+                  if (authPassword.length < 8) {
+                    setAuthError("Use a password of at least 8 characters.");
+                    return;
+                  }
+                  setAuthBusy(true);
+                  setAuthError("");
+                  setAuthNotice("");
+                  const { error } = await supabase.auth.updateUser({ password: authPassword });
+                  setAuthBusy(false);
+                  if (error) setAuthError(error.message);
+                  else {
+                    setAuthPassword("");
+                    setAuthNotice("Your password has been changed.");
+                  }
+                }}>
+                  <label>New password<input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} autoComplete="new-password" minLength={8} placeholder="At least 8 characters" required disabled={authBusy} /></label>
+                  <button type="submit" className="auth-submit" disabled={authBusy}>{authBusy ? "Saving…" : "Change password"}</button>
+                </form>
                 {(authUser.app_metadata.role === "admin" || authUser.app_metadata.role === "staff") && <a className="admin-account-link" href="/admin"><ShieldCheck size={17} />Open admin dashboard</a>}
                 {pendingCardCheckout && <p className="auth-notice" role="status">Sign-in complete. Continue with card checkout when it is available.</p>}
                 <button type="button" className="account-signout" onClick={signOut} disabled={authBusy}>
@@ -801,16 +840,18 @@ export default function Home() {
             ) : (
               <>
                 <p className="checkout-label">{pendingCardCheckout ? "Card checkout" : "FRAN6 account"}</p>
-                <h2 id="account-title">{authMode === "sign-up" ? "Create your account" : "Welcome back"}</h2>
+                <h2 id="account-title">{authMode === "sign-up" ? "Create your account" : authMode === "forgot" ? "Reset your password" : "Welcome back"}</h2>
                 <p className="auth-intro">
-                  {pendingCardCheckout
+                  {authMode === "forgot"
+                    ? "Enter the email or phone number on the account. The reset link goes to that account’s email."
+                    : pendingCardCheckout
                     ? "Sign in or create an account to continue with card payment. WhatsApp orders do not need an account."
                     : "Sign in with your email or phone number, or create an account for faster card checkout. WhatsApp orders are always available as a guest."}
                 </p>
-                <div className="auth-tabs" role="tablist" aria-label="Account options">
+                {authMode !== "forgot" && <div className="auth-tabs" role="tablist" aria-label="Account options">
                   <button type="button" role="tab" aria-selected={authMode === "sign-in"} className={authMode === "sign-in" ? "active" : ""} onClick={() => { setAuthMode("sign-in"); setAuthError(""); setAuthNotice(""); }}>Sign in</button>
                   <button type="button" role="tab" aria-selected={authMode === "sign-up"} className={authMode === "sign-up" ? "active" : ""} onClick={() => { setAuthMode("sign-up"); setAuthError(""); setAuthNotice(""); }}>Create account</button>
-                </div>
+                </div>}
                 {!isSupabaseConfigured && (
                   <p className="auth-setup-note" role="status">
                     Accounts are not configured yet. Add the Supabase URL and publishable key to <code>.env.local</code>, then restart the app.
@@ -826,9 +867,11 @@ export default function Home() {
                     </>
                   )}
                   <label>{authMode === "sign-up" ? "Email address" : "Email or phone number"}<input type={authMode === "sign-up" ? "email" : "text"} value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder={authMode === "sign-up" ? "you@example.com" : "Email or phone number"} autoComplete={authMode === "sign-up" ? "email" : "username"} inputMode={authMode === "sign-up" ? "email" : "text"} required disabled={!isSupabaseConfigured || authBusy} /></label>
-                  <label>Password<input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder={authMode === "sign-up" ? "At least 8 characters" : "Your password"} autoComplete={authMode === "sign-up" ? "new-password" : "current-password"} minLength={authMode === "sign-up" ? 8 : undefined} required disabled={!isSupabaseConfigured || authBusy} /></label>
+                  {authMode !== "forgot" && <label>Password<input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder={authMode === "sign-up" ? "At least 8 characters" : "Your password"} autoComplete={authMode === "sign-up" ? "new-password" : "current-password"} minLength={authMode === "sign-up" ? 8 : undefined} required disabled={!isSupabaseConfigured || authBusy} /></label>}
+                  {authMode === "sign-in" && <button type="button" className="auth-text-button" onClick={() => { setAuthMode("forgot"); setAuthError(""); setAuthNotice(""); }}>Forgot password?</button>}
+                  {authMode === "forgot" && <button type="button" className="auth-text-button" onClick={() => { setAuthMode("sign-in"); setAuthError(""); setAuthNotice(""); }}>Back to sign in</button>}
                   <button type="submit" className="auth-submit" disabled={!isSupabaseConfigured || authBusy}>
-                    {authBusy ? "Please wait…" : authMode === "sign-up" ? "Create account" : "Sign in"}
+                    {authBusy ? "Please wait…" : authMode === "sign-up" ? "Create account" : authMode === "forgot" ? "Send reset link" : "Sign in"}
                   </button>
                 </form>
                 {pendingCardCheckout && <button type="button" className="auth-continue-guest" onClick={closeAccount}>Cancel and keep shopping</button>}
