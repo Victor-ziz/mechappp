@@ -3,7 +3,7 @@
 import Image from "next/image";
 import "./shop.css";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { ChevronRight, Heart, LogOut, MessageCircle, Minus, Plus, Search, ShieldCheck, ShoppingBag, Trash2, UserRound, X } from "lucide-react";
+import { ChevronRight, Heart, LogOut, MessageCircle, Minus, Plus, Search, ShoppingBag, Trash2, UserRound, X } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "../lib/supabase/client";
 import PhotoSwipe from "./photo-swipe";
@@ -348,8 +348,13 @@ export default function Home() {
         } else {
           setAuthPassword("");
           setAuthMode("sign-in");
-          setAuthNotice("Account created. Check your email to confirm it, then sign in to continue.");
+          setAuthNotice("Account created. Check your email for the FRAN6 welcome and confirmation, then sign in to continue.");
         }
+        void fetch("/api/email/welcome", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email: authEmail.trim(), name: authName.trim() }),
+        });
       } else if (authEmail.includes("@")) {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: authEmail.trim(),
@@ -411,7 +416,7 @@ export default function Home() {
       setPendingCardCheckout(true);
       setAuthMode("sign-in");
       setAuthError("");
-      setAuthNotice("Sign in or create an account to continue with card checkout.");
+      setAuthNotice("Sign in or create an account to continue with Paystack.");
       setAuthOpen(true);
       return;
     }
@@ -461,7 +466,7 @@ export default function Home() {
     if (error) {
       const missingOrderFunction = error.code === "PGRST202" || error.message.includes("create_store_order");
       throw new Error(missingOrderFunction
-        ? "Card checkout cannot start yet. Create the Supabase tables and order functions by running supabase/migrations/202611210001_admin_dashboard.sql in the Supabase SQL editor, then try again."
+        ? "Paystack checkout cannot start yet. Create the Supabase tables and order functions by running supabase/migrations/202611210001_admin_dashboard.sql in the Supabase SQL editor, then try again."
         : error.message);
     }
     if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("The order could not be created.");
@@ -593,11 +598,6 @@ export default function Home() {
             {query && <button type="button" className="clear-search" onClick={() => setQuery("")} aria-label="Clear search"><X size={16} /></button>}
           </form>
           <div className="header-actions">
-            {(authUser?.app_metadata.role === "admin" || authUser?.app_metadata.role === "staff") && (
-              <a className="admin-shortcut" href="/admin" aria-label="Open admin dashboard">
-                <ShieldCheck size={19} /><span>Admin</span>
-              </a>
-            )}
             <button className="saved-button" onClick={() => setSavedOpen(true)} aria-label="View saved parts">
               <Heart size={19} /><span>Saved</span>{saved.length > 0 && <b>{saved.length}</b>}
             </button>
@@ -729,12 +729,12 @@ export default function Home() {
                 aria-describedby={!paystackConfigured || paystackLoadError ? "paystack-setup-note" : undefined}
                 onClick={() => { setCheckoutProduct(null); startCardCheckout(); }}
               >
-                Pay by card with Paystack
+                Pay online with Paystack
                 <ChevronRight size={17} />
               </button>
               {(!paystackConfigured || paystackLoadError) && (
                 <p className="checkout-option-note" id="paystack-setup-note">
-                  {paystackLoadError ? "Card checkout could not load. Please order via WhatsApp." : "Card checkout is not set up yet. Order via WhatsApp for now."}
+                  {paystackLoadError ? "Online checkout could not load. Please order via WhatsApp." : "Online checkout is not set up yet. Order via WhatsApp for now."}
                 </p>
               )}
               {orderError && <p className="checkout-error" role="alert">{orderError}</p>}
@@ -831,22 +831,21 @@ export default function Home() {
                   <label>New password<input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} autoComplete="new-password" minLength={8} placeholder="At least 8 characters" required disabled={authBusy} /></label>
                   <button type="submit" className="auth-submit" disabled={authBusy}>{authBusy ? "Saving…" : "Change password"}</button>
                 </form>
-                {(authUser.app_metadata.role === "admin" || authUser.app_metadata.role === "staff") && <a className="admin-account-link" href="/admin"><ShieldCheck size={17} />Open admin dashboard</a>}
-                {pendingCardCheckout && <p className="auth-notice" role="status">Sign-in complete. Continue with card checkout when it is available.</p>}
+                {pendingCardCheckout && <p className="auth-notice" role="status">Sign-in complete. Continue with Paystack when it is available.</p>}
                 <button type="button" className="account-signout" onClick={signOut} disabled={authBusy}>
                   <LogOut size={17} />{authBusy ? "Signing out…" : "Sign out"}
                 </button>
               </div>
             ) : (
               <>
-                <p className="checkout-label">{pendingCardCheckout ? "Card checkout" : "FRAN6 account"}</p>
+                <p className="checkout-label">{pendingCardCheckout ? "Paystack checkout" : "FRAN6 account"}</p>
                 <h2 id="account-title">{authMode === "sign-up" ? "Create your account" : authMode === "forgot" ? "Reset your password" : "Welcome back"}</h2>
                 <p className="auth-intro">
                   {authMode === "forgot"
                     ? "Enter the email or phone number on the account. The reset link goes to that account’s email."
                     : pendingCardCheckout
-                    ? "Sign in or create an account to continue with card payment. WhatsApp orders do not need an account."
-                    : "Sign in with your email or phone number, or create an account for faster card checkout. WhatsApp orders are always available as a guest."}
+                    ? "Sign in or create an account to continue with Paystack. WhatsApp orders do not need an account."
+                    : "Sign in with your email or phone number, or create an account for faster Paystack checkout. WhatsApp orders are always available as a guest."}
                 </p>
                 {authMode !== "forgot" && <div className="auth-tabs" role="tablist" aria-label="Account options">
                   <button type="button" role="tab" aria-selected={authMode === "sign-in"} className={authMode === "sign-in" ? "active" : ""} onClick={() => { setAuthMode("sign-in"); setAuthError(""); setAuthNotice(""); }}>Sign in</button>
@@ -899,7 +898,7 @@ export default function Home() {
                 <label>Account email<input type="email" value={customerEmail} readOnly required /></label>
               </>
             ) : (
-              <p className="checkout-option-note">Sign in to pay by card, or order as a guest through WhatsApp.</p>
+              <p className="checkout-option-note">Sign in to pay with Paystack, or order as a guest through WhatsApp.</p>
             )}
             <div className="checkout-total"><span>Total</span><strong>{formatNaira(checkoutSubtotal)}</strong></div>
             {paystackLoadError && <p className="checkout-error" role="alert">Paystack could not load. Close this window and order via WhatsApp instead.</p>}
@@ -907,17 +906,17 @@ export default function Home() {
             {orderError && <p className="checkout-error" role="alert">{orderError}</p>}
             {authUser ? (
               <button type="submit" className="paystack-button" disabled={!paystackConfigured || !paystackReady || paystackLoadError}>
-                {!paystackConfigured ? "Paystack is not set up" : paystackLoadError ? "Payment unavailable" : paystackReady ? `Pay ${formatNaira(checkoutSubtotal)} by card` : "Loading secure checkout…"}
+                {!paystackConfigured ? "Paystack is not set up" : paystackLoadError ? "Payment unavailable" : paystackReady ? `Pay ${formatNaira(checkoutSubtotal)} with Paystack` : "Loading Paystack…"}
               </button>
             ) : (
               <button type="button" className="paystack-button" onClick={startCardCheckout} disabled={!paystackConfigured || paystackLoadError}>
-                {!paystackConfigured ? "Paystack is not set up" : paystackLoadError ? "Payment unavailable" : "Sign in to pay by card"}
+                {!paystackConfigured ? "Paystack is not set up" : paystackLoadError ? "Payment unavailable" : "Sign in to pay with Paystack"}
               </button>
             )}
             <a className="whatsapp-button checkout-whatsapp" href={`https://wa.me/${whatsappNumber}?text=${checkoutWhatsappMessage}`} onClick={() => recordWhatsAppOrder(checkoutItems)} target="_blank" rel="noopener noreferrer">
               <MessageCircle size={17} />Order via WhatsApp
             </a>
-            {!paystackConfigured && <p className="checkout-option-note">Card payments are not configured yet. Close this window to order via WhatsApp.</p>}
+            {!paystackConfigured && <p className="checkout-option-note">Paystack is not configured yet. Close this window to order via WhatsApp.</p>}
           </form>
         </div>
       )}

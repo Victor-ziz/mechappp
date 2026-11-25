@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { canAccess, cleanPermissions, storeRole, type StaffPermission } from "../../lib/admin/access";
 import type { AdminActionResult, AdminOrder } from "../../lib/admin/types";
+import { orderApprovedLetter, sendFran6Email } from "../../lib/email";
 import { createSupabaseAdminClient, storeHasAdmin } from "../../lib/supabase/admin";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
 
@@ -139,11 +140,39 @@ export async function updateOrderStatus(id: string, status: AdminOrder["status"]
     return { success: false, error: "Invalid order update." };
   }
 
+  const { data: existing, error: loadError } = await supabase
+    .from("orders")
+    .select("customer_name,customer_email,reference,total,items,status")
+    .eq("id", id)
+    .maybeSingle();
+  if (loadError || !existing) return { success: false, error: loadError?.message || "Order not found." };
+
   const { error } = await supabase.from("orders").update({ status, updated_at: new Date().toISOString() }).eq("id", id);
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/admin");
-  return { success: true };
+  if (status !== "processing" || existing.status === "processing") return { success: true };
+
+  const items = Array.isArray(existing.items)
+    ? existing.items.flatMap((item) => {
+        if (!item || typeof item !== "object") return [];
+        const row = item as { name?: unknown; quantity?: unknown };
+        const name = typeof row.name === "string" ? row.name : "";
+        const quantity = typeof row.quantity === "number" ? row.quantity : 0;
+        return name && quantity > 0 ? [{ name, quantity }] : [];
+      })
+    : [];
+  const letter = orderApprovedLetter({
+    name: existing.customer_name || "",
+    reference: existing.reference,
+    total: existing.total,
+    items,
+  });
+  const email = existing.customer_email
+    ? await sendFran6Email({ to: existing.customer_email, subject: "Your FRAN6 order is approved", ...letter })
+    : { sent: false as const, reason: "This order has no customer email." };
+  if (!email.sent) return { success: true, notice: `Order approved. The email was not sent. ${email.reason}` };
+  return { success: true, notice: "Order approved. The customer has been emailed." };
 }
 
 export async function moderateReview(id: string, status: "approved" | "rejected"): Promise<AdminActionResult> {

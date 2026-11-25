@@ -112,7 +112,6 @@ export default function ResetPasswordForm() {
           </form>
         )}
         <Link className="admin-access-back" href="/">Back to the shop</Link>
-        <Link className="admin-access-back" href="/admin">Admin sign-in</Link>
       </section>
     </main>
   );

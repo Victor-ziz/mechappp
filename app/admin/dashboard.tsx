@@ -74,14 +74,14 @@ export default function AdminDashboard({
     .reduce((sum, order) => sum + order.total, 0);
   const lowStock = products.filter((product) => product.active && product.stock <= 3).length;
 
-  const finishAction = (result: { success: boolean; error?: string }, successMessage: string) => {
+  const finishAction = (result: { success: boolean; error?: string; notice?: string }, successMessage: string) => {
     if (!result.success) {
       setError(result.error || "The update could not be completed.");
       setNotice("");
       return;
     }
     setError("");
-    setNotice(successMessage);
+    setNotice(result.notice || successMessage);
     setEditing(null);
     router.refresh();
   };

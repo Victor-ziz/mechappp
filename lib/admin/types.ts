@@ -60,4 +60,5 @@ export type StoreAccount = {
 export type AdminActionResult = {
   success: boolean;
   error?: string;
+  notice?: string;
 };

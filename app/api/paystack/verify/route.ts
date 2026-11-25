@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!paystackSecretKey || !supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json({ error: "Secure payment verification is not configured." }, { status: 503 });
+    return NextResponse.json({ error: "Paystack received the payment, but the shop could not record it yet. Please contact FRAN6 and keep your payment reference." }, { status: 503 });
   }
 
   let reference: unknown;
