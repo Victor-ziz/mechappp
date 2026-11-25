@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
   if (
     transaction?.status !== "success"
     || typeof transaction.reference !== "string"
-    || !/^FRAN6-[A-F0-9]{32}$/.test(transaction.reference)
+    || !/^FRAN6-[A-F0-9]{32}$/i.test(transaction.reference.trim())
     || typeof transaction.amount !== "number"
     || !Number.isSafeInteger(transaction.amount)
     || transaction.currency !== "NGN"
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const { error } = await adminClient.rpc("confirm_store_order", {
-    p_reference: transaction.reference,
+    p_reference: transaction.reference.trim().toUpperCase(),
     p_transaction_id: transaction.id,
     p_amount: transaction.amount,
     p_email: transaction.email,

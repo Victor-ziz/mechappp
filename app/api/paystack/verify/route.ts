@@ -30,13 +30,14 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Invalid verification request." }, { status: 400 });
   }
-  if (typeof reference !== "string" || !/^FRAN6-[A-F0-9]{32}$/.test(reference)) {
+  const supplied = typeof reference === "string" ? reference.trim() : "";
+  if (!/^FRAN6-[A-F0-9]{32}$/i.test(supplied)) {
     return NextResponse.json({ error: "Invalid payment reference." }, { status: 400 });
   }
 
   let paystackResponse: Response;
   try {
-    paystackResponse = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+    paystackResponse = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(supplied)}`, {
       headers: { authorization: `Bearer ${paystackSecretKey}` },
       cache: "no-store",
     });
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Paystack returned an unreadable verification response." }, { status: 502 });
   }
   const transaction = verification.data;
-  if (!verification.status || transaction?.status !== "success" || transaction.reference !== reference || transaction.currency !== "NGN") {
+  if (!verification.status || transaction?.status !== "success" || transaction.reference.toUpperCase() !== supplied.toUpperCase() || transaction.currency !== "NGN") {
     return NextResponse.json({ error: "Paystack has not confirmed this payment." }, { status: 400 });
   }
 
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const { error: confirmationError } = await adminClient.rpc("confirm_store_order", {
-    p_reference: reference,
+    p_reference: supplied.toUpperCase(),
     p_transaction_id: transaction.id,
     p_amount: transaction.amount,
     p_email: transaction.email,

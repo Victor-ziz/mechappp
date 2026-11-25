@@ -19,7 +19,7 @@ declare global {
         currency: string;
         reference: string;
         metadata?: Record<string, unknown>;
-        callback: (response: { reference: string }) => void;
+        callback: (response: { reference?: string; trxref?: string } | string) => void;
         onClose: () => void;
       }) => { openIframe: () => void };
     };
@@ -559,8 +559,8 @@ export default function Home() {
         custom_fields: [{ display_name: "Customer name", variable_name: "customer_name", value: customerName }],
         cart: checkoutItems.map((item) => ({ name: item.name, quantity: item.quantity, price: item.price })),
       },
-      callback: (response) => {
-        void verifyPaystackOrder(response.reference, Boolean(checkoutProduct));
+      callback: () => {
+        void verifyPaystackOrder(order.reference, Boolean(checkoutProduct));
       },
       onClose: () => undefined,
     });
