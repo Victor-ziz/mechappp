@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
+import { orderUpdateLetter, sendFran6Email } from "../../../../lib/email";
 
 type PaystackVerifyResponse = {
   status: boolean;
@@ -70,6 +71,31 @@ export async function POST(request: NextRequest) {
   });
   if (confirmationError) {
     return NextResponse.json({ error: `Payment was confirmed but the order could not be updated: ${confirmationError.message}` }, { status: 500 });
+  }
+
+  const { data: order } = await adminClient
+    .from("orders")
+    .select("customer_name,customer_email,reference,total,items,status")
+    .eq("reference", supplied.toUpperCase())
+    .maybeSingle();
+  if (order?.customer_email) {
+    const items = Array.isArray(order.items)
+      ? order.items.flatMap((item) => {
+          if (!item || typeof item !== "object") return [];
+          const row = item as { name?: unknown; quantity?: unknown };
+          const name = typeof row.name === "string" ? row.name : "";
+          const quantity = typeof row.quantity === "number" ? row.quantity : 0;
+          return name && quantity > 0 ? [{ name, quantity }] : [];
+        })
+      : [];
+    const letter = orderUpdateLetter({
+      name: order.customer_name || "",
+      reference: order.reference,
+      total: order.total,
+      status: order.status,
+      items,
+    });
+    await sendFran6Email({ to: order.customer_email, subject: letter.subject, html: letter.html, text: letter.text });
   }
 
   return NextResponse.json({ verified: true });

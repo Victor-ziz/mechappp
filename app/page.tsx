@@ -478,11 +478,13 @@ export default function Home() {
   const recordWhatsAppOrder = (items: { id: number; quantity: number }[]) => {
     setOrderError("");
     void createStoreOrder("whatsapp", items)
-      .then(() => setOrderError(""))
+      .then((order) => {
+        if (authUser) window.location.assign(`/orders/${encodeURIComponent(order.reference)}?received=1`);
+      })
       .catch((error: unknown) => setOrderError(error instanceof Error ? error.message : "Could not record this order."));
   };
 
-  const verifyPaystackOrder = async (reference: string, singleProductCheckout: boolean) => {
+  const verifyPaystackOrder = async (reference: string) => {
     try {
       const response = await fetch("/api/paystack/verify", {
         method: "POST",
@@ -494,12 +496,7 @@ export default function Home() {
         setCheckoutError(result.error || "Payment could not be verified yet. Keep your reference and contact us.");
         return;
       }
-      window.alert(`Payment successful. Reference: ${reference}`);
-      if (singleProductCheckout) setCheckoutProduct(null);
-      else setCart({});
-      setCheckoutOpen(false);
-      setCartOpen(false);
-      setCheckoutError("");
+      window.location.assign(`/orders/${encodeURIComponent(reference)}?received=1`);
     } catch (error) {
       setCheckoutError(error instanceof Error ? error.message : "Payment could not be verified. Please contact us with your reference.");
     }
@@ -560,7 +557,7 @@ export default function Home() {
         cart: checkoutItems.map((item) => ({ name: item.name, quantity: item.quantity, price: item.price })),
       },
       callback: () => {
-        void verifyPaystackOrder(order.reference, Boolean(checkoutProduct));
+        void verifyPaystackOrder(order.reference);
       },
       onClose: () => undefined,
     });
@@ -831,7 +828,7 @@ export default function Home() {
                   <label>New password<input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} autoComplete="new-password" minLength={8} placeholder="At least 8 characters" required disabled={authBusy} /></label>
                   <button type="submit" className="auth-submit" disabled={authBusy}>{authBusy ? "Saving…" : "Change password"}</button>
                 </form>
-                {pendingCardCheckout && <p className="auth-notice" role="status">Sign-in complete. Continue with Paystack when it is available.</p>}
+                <a className="admin-account-link" href="/orders">Order history</a>
                 <button type="button" className="account-signout" onClick={signOut} disabled={authBusy}>
                   <LogOut size={17} />{authBusy ? "Signing out…" : "Sign out"}
                 </button>

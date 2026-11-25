@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { canAccess, cleanPermissions, storeRole, type StaffPermission } from "../../lib/admin/access";
 import type { AdminActionResult, AdminOrder } from "../../lib/admin/types";
-import { orderApprovedLetter, sendFran6Email } from "../../lib/email";
+import { orderUpdateLetter, sendFran6Email } from "../../lib/email";
 import { createSupabaseAdminClient, storeHasAdmin } from "../../lib/supabase/admin";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
 
@@ -151,7 +151,7 @@ export async function updateOrderStatus(id: string, status: AdminOrder["status"]
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/admin");
-  if (status !== "processing" || existing.status === "processing") return { success: true };
+  if (status === existing.status) return { success: true };
 
   const items = Array.isArray(existing.items)
     ? existing.items.flatMap((item) => {
@@ -162,17 +162,18 @@ export async function updateOrderStatus(id: string, status: AdminOrder["status"]
         return name && quantity > 0 ? [{ name, quantity }] : [];
       })
     : [];
-  const letter = orderApprovedLetter({
+  const letter = orderUpdateLetter({
     name: existing.customer_name || "",
     reference: existing.reference,
     total: existing.total,
+    status,
     items,
   });
   const email = existing.customer_email
-    ? await sendFran6Email({ to: existing.customer_email, subject: "Your FRAN6 order is approved", ...letter })
+    ? await sendFran6Email({ to: existing.customer_email, subject: letter.subject, html: letter.html, text: letter.text })
     : { sent: false as const, reason: "This order has no customer email." };
-  if (!email.sent) return { success: true, notice: `Order approved. The email was not sent. ${email.reason}` };
-  return { success: true, notice: "Order approved. The customer has been emailed." };
+  if (!email.sent) return { success: true, notice: `Order updated. The email was not sent. ${email.reason}` };
+  return { success: true, notice: "Order updated. The customer has been emailed." };
 }
 
 export async function moderateReview(id: string, status: "approved" | "rejected"): Promise<AdminActionResult> {

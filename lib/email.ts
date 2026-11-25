@@ -59,19 +59,57 @@ export function welcomeLetter(name: string) {
   );
 }
 
-export function orderApprovedLetter(input: { name: string; reference: string; total: number; items: { name: string; quantity: number }[] }) {
+const orderMessages: Record<string, { subject: string; title: string; detail: string }> = {
+  awaiting_payment: {
+    subject: "Your FRAN6 order is waiting for payment",
+    title: "Waiting for payment",
+    detail: "This order is saved, and FRAN6 is waiting for the Paystack payment.",
+  },
+  paid: {
+    subject: "We received your FRAN6 order",
+    title: "Order received",
+    detail: "Your payment was received. FRAN6 will confirm the order and email you when it moves ahead.",
+  },
+  whatsapp_requested: {
+    subject: "FRAN6 received your order request",
+    title: "Order request received",
+    detail: "FRAN6 has your WhatsApp order request and will confirm availability and delivery.",
+  },
+  processing: {
+    subject: "FRAN6 confirmed your order",
+    title: "Order confirmed",
+    detail: "FRAN6 confirmed this order and is preparing it.",
+  },
+  completed: {
+    subject: "Your FRAN6 order is complete",
+    title: "Order complete",
+    detail: "This order is complete. Thank you for shopping with FRAN6.",
+  },
+  cancelled: {
+    subject: "Your FRAN6 order was cancelled",
+    title: "Order cancelled",
+    detail: "FRAN6 cancelled this order. Sign in to view the details, or contact the shop if you still need the parts.",
+  },
+};
+
+export function orderUpdateLetter(input: { name: string; reference: string; total: number; status: string; items: { name: string; quantity: number }[] }) {
+  const message = orderMessages[input.status] ?? orderMessages.paid;
   const greeting = input.name ? `Hello ${input.name},` : "Hello,";
   const parts = input.items.length
     ? input.items.map((item) => `${item.name} × ${item.quantity}`).join(", ")
     : "the parts on your order";
-  return letter(
-    "Your order is approved",
-    [
-      greeting,
-      `FRAN6 has approved your order ${input.reference}. We are preparing ${parts}.`,
-      `Order total: ${formatNaira(input.total)}.`,
-      "We will continue from here. If you need to reach us about this order, reply to the shop on WhatsApp or use the contact on the website.",
-    ],
-    { href: site, label: "Back to FRAN6" },
-  );
+  return {
+    subject: message.subject,
+    ...letter(
+      message.title,
+      [
+        greeting,
+        message.detail,
+        `Order ${input.reference}: ${parts}.`,
+        `Order total: ${formatNaira(input.total)}.`,
+        "Sign in with the same account to open the order.",
+      ],
+      { href: `${site}/orders/${input.reference}`, label: "View order details" },
+    ),
+  };
 }
