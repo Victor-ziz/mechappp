@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { canAccess, cleanPermissions, storeRole, type StaffPermission } from "../../lib/admin/access";
 import type { AdminActionResult, AdminOrder } from "../../lib/admin/types";
 import { orderUpdateLetter, sendFran6Email } from "../../lib/email";
+import { cleanStoreContact } from "../../lib/store-contact";
 import { createSupabaseAdminClient, storeHasAdmin } from "../../lib/supabase/admin";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
 
@@ -276,5 +277,34 @@ export async function removeStaff(userId: string): Promise<AdminActionResult> {
   });
   if (error) return { success: false, error: error.message };
   revalidatePath("/admin");
+  return { success: true };
+}
+
+export async function saveStoreContact(input: {
+  whatsappNumber: string;
+  instagramUrl: string;
+  facebookUrl: string;
+  tiktokUrl: string;
+  xUrl: string;
+}): Promise<AdminActionResult> {
+  await requireOwner();
+  const cleaned = cleanStoreContact(input);
+  if ("error" in cleaned) return { success: false, error: cleaned.error };
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin.from("store_contact").upsert({
+    id: 1,
+    whatsapp_number: cleaned.contact.whatsappNumber,
+    instagram_url: cleaned.contact.instagramUrl,
+    facebook_url: cleaned.contact.facebookUrl,
+    tiktok_url: cleaned.contact.tiktokUrl,
+    x_url: cleaned.contact.xUrl,
+    updated_at: new Date().toISOString(),
+  });
+  if (error) {
+    const missing = error.code === "PGRST205" || error.message.includes("store_contact");
+    return { success: false, error: missing ? "Run supabase/migrations/202611270001_store_contact.sql in the Supabase SQL editor, then save again." : error.message };
+  }
+  revalidatePath("/admin");
+  revalidatePath("/");
   return { success: true };
 }
